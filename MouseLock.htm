@@ -1,0 +1,164 @@
+<html lang="en">
+<head>
+<script>
+
+false && document.addEventListener('DOMContentLoaded', () => {
+	document.addEventListener('pointerdown', (e) => {
+		document.body.setPointerCapture(e.pointerId);
+	});
+
+	document.addEventListener('pointermove', (e) => {
+		console.log(e.pageX, e.pageY, e.movementX, e.movementY);
+	});
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+	const fakeCursor = document.createElement('div');
+	fakeCursor.style.position = 'absolute';
+	fakeCursor.style.display = 'none';
+	fakeCursor.style.width = '10px';
+	fakeCursor.style.height = '10px';
+	fakeCursor.style.background = 'red';
+	document.body.appendChild(fakeCursor);
+
+	const testInput = document.createElement('input');
+	testInput.setAttribute('type', 'text');
+	document.body.appendChild(testInput);
+
+	const pointerLockTarget = document.body;
+
+	let usingFake = false;
+	let actualX = 0;
+	let actualY = 0;
+	let fakeX = 0;
+	let fakeY = 0;
+
+	// https://www.w3.org/TR/pointerlock-2/#synthetic-cursor-interaction-with-html-dom-ui
+	document.addEventListener("click", function (e) {
+		if (e._isSynthetic) {
+			return;
+		}
+		// send a synthetic click
+		var ee = document.createEvent("MouseEvents");
+		ee._isSynthetic = true;
+		x = fakeX;
+		y = fakeY;
+		ee.initMouseEvent(
+			"click", true, true, null, 1,
+			x + e.screenX - e.clientX,
+			y + e.screenY - e.clientY,
+			x, y
+		);
+		var target = document.elementFromPoint(x, y);
+		if (target) {
+			target.dispatchEvent(ee);
+		}
+	});
+
+	function updateFakeCursor() {
+		fakeCursor.style.left = `${fakeX}px`;
+		fakeCursor.style.top = `${fakeY}px`;
+	}
+
+	function beginCapture() {
+		usingFake = true;
+		fakeCursor.style.display = 'block';
+		document.addEventListener('mousemove', handleMove);
+	}
+
+	function endCapture() {
+		usingFake = false;
+		fakeCursor.style.display = 'none';
+		document.removeEventListener('mousemove', handleMove);
+	}
+
+	function forward(e) {
+		testInput.dispatchEvent(e);
+	}
+
+	function handleMove(e) {
+		fakeX += e.movementX;
+		fakeY += e.movementY;
+		updateFakeCursor();
+	}
+
+	function requestCapture() {
+		pointerLockTarget.requestPointerLock();
+		fakeX = actualX;
+		fakeY = actualY;
+		updateFakeCursor();
+	}
+
+	function registerCapture() {
+		document.addEventListener('mousedown', (e) => {
+			document.body.requestFullscreen();
+			actualX = e.pageX;
+			actualY = e.pageY;
+			requestCapture();
+			document.addEventListener('mouseup', (e) => {
+				document.exitPointerLock();
+				endCapture();
+			}, { once: true });
+		}, { once: true });
+	}
+
+	document.addEventListener('mousemove', (e) => {
+		const margin = 50;
+		if (usingFake) {
+			let locked = false;
+			if (actualY < margin && fakeY < margin) {
+				locked = true;
+			}
+			if (actualX < margin && fakeX < margin) {
+				locked = true;
+			}
+			if (actualX > window.innerWidth - margin && fakeX > window.innerWidth - margin) {
+				locked = true;
+			}
+			if (actualY > window.innerHeight - margin && fakeY > window.innerHeight - margin) {
+				locked = true;
+			}
+			if (!locked) {
+				document.exitPointerLock();
+				endCapture();
+			}
+			return;
+		}
+
+		actualX = e.pageX;
+		actualY = e.pageY;
+
+		if (actualY < 20) {
+			return; // too late; mouse is high enough to make browser bar appear, and would get stuck
+		}
+
+		if (actualY < margin && e.movementY < 0) {
+			requestCapture();
+		} else if (actualX < margin && e.movementX < 0) {
+			requestCapture();
+		} else if (actualX > window.innerWidth - margin && e.movementX > 0) {
+			requestCapture();
+		} else if (actualY > window.innerHeight - margin && e.movementY > 0) {
+			requestCapture();
+		}
+	});
+
+	document.addEventListener('pointerlockchange', () => {
+		if (document.pointerLockElement === pointerLockTarget) {
+			beginCapture();
+		} else {
+			endCapture();
+			registerCapture();
+		}
+	});
+	document.addEventListener('pointerlockerror', () => {
+		console.log('nope');
+	});
+	registerCapture();
+});
+
+</script>
+</head>
+<body>
+</body>
+</html>
